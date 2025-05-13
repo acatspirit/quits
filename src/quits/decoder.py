@@ -504,3 +504,290 @@ def sliding_window_bplsd_circuit_mem(zcheck_samples, circuit, hz, lz, W, F, max_
     logical_pred = sliding_window_circuit_mem(zcheck_samples, circuit, hz, lz, W, F,BpLsdDecoder, BpLsdDecoder, dict1, dict2, 'channel_probs','channel_probs', 'decode', 'decode', tqdm_on=tqdm_on)
     
     return logical_pred
+
+class SSFDecoder:
+    def __init__(self, code, p, error_type):
+        
+        self.Hx = code.hx # the parity check matrix
+        self.Hz = code.hz
+        self.p = p # the physical error rate
+        Lz, Lx = compute_lz_and_lx(self.Hx, self.Hz) # the logical codeword matrix
+
+        if error_type == "Z":
+            self.H = self.Hx
+            self.F, self.syndromes_F = code.get_SSF_error_matrix(error_type = "Z") # the error matrix and the syndromes they generate
+            self.L = Lx
+        elif error_type == "X":
+            self.H = self.Hz
+            self.F, self.syndromes_F = code.get_SSF_error_matrix(error_type = "X")
+            self.L = Lz
+        
+
+
+    def error_magnitude(self, error, curr_syndrome):
+        '''
+        Calculate the magnitude of the error based on the syndrome weight change
+
+        :param error: The error to be evaluated
+        :param curr_syndrome: The current error syndrome
+
+        :return: The magnitude of the error (int)
+        '''
+        if sum(error) != 0:
+            error_mag = (sum(curr_syndrome) - sum((curr_syndrome + error@self.H.T)%2))/sum(error)
+        else:
+            error_mag = 0
+        return error_mag
+
+
+    def sorted_qubit_list(self, qubit_set):
+        """ 
+        Sort a set of qubits in decreasing syndrome weight. 
+
+        :param qubit_set: a set of qubit indices in a given plaquette
+        
+        :return: a list of qubit indices that is sorted based on their impact on the syndrome
+        """
+        H = self.H
+        sorted_qubits = []
+
+
+        for qubit in qubit_set:
+            test_error = np.zeros(H.shape[1])
+            test_error[qubit] = 1
+            test_syndrome = (test_error@H.T)%2
+
+            sorted_qubits += [(sum(test_syndrome), qubit)]
+        return [pair[1] for pair in sorted(sorted_qubits)]
+
+    def sort_error_list(self, error_list, curr_syndrome):
+        """
+        Sort the error list based on the magnitude of the error from function error_magnitude
+
+        :param error_list: a list of errors to be sorted
+        :param curr_syndrome: the current syndrome
+
+        :return: a sorted list of errors
+        """
+        H = self.H
+        sorted_error_list = sorted(
+        [error for error in error_list if self.error_magnitude(error, curr_syndrome, H) >= 0],
+        key=lambda error: self.error_magnitude(error, curr_syndrome, H),
+        reverse=True)
+        return sorted_error_list
+
+
+    def get_syndrome_weight_change(self, syndrome):
+        """
+        Gets the change in the syndrome weight after flipping each error in F
+        
+        :param syndrome: 1D np.array of the current syndrome
+        
+        :return: new_syndrome_inds - the indices of the errors that reduce the syndrome weight
+                 Delta - the change in the syndrome weight after flipping each error
+        """
+        syndrome_after_flip = (syndrome + self.syndromes_F) % 2
+        Delta = np.sum(syndrome - syndrome_after_flip, axis=1)
+        new_syndrome_inds = np.where(Delta > 0)[0]
+        
+        return new_syndrome_inds, Delta[new_syndrome_inds]
+    
+    def logical_error(self, error):
+        """
+        Find whether a given error is a logical error
+        
+        :param error: 1D np.array of the error
+        
+        :return: logical_error - 1D np.array of the logical error
+
+        rather than check this just use BPOSD if it fails
+        also make sure this works when you are not just trying for x errors
+        """
+        logical_error = (self.L@error)% 2
+        return np.any(logical_error)
+
+    def flip_decoder(self, syndrome):
+        """
+        Flip decoder based on arxiv:2004.11199, algorithm 1
+
+        :param syndrome: 1D np.array of the current syndrome
+
+        :return: initial_error - 1D np.array of the error found by the flip decoder
+        """
+        H = self.H
+        initial_error = np.zeros(H.shape[1])
+        flippable_vertices = set()
+        curr_syndrome = syndrome
+
+        # find the flippable vertices 
+        for qubit in range(H.shape[1]):
+            plaqs = np.where(H[:, qubit] == 1)[0]
+            if sum(syndrome[plaqs]) >= (len(plaqs) - sum(syndrome[plaqs])):
+                flippable_vertices.add(qubit)
+        
+        # sorting the flippable vertices in decreasing syndrome weight
+        sorted_flippable_qubits = self.sorted_qubit_list(flippable_vertices)
+        
+        # check whether flipping a qubit will reduce the syndrome weight
+        while sorted_flippable_qubits:
+
+            curr_qubit = sorted_flippable_qubits.pop()
+
+            test_error = np.zeros(H.shape[1])
+            test_error[curr_qubit] = 1
+            test_syndrome = test_error@H.T
+
+            # update the syndrome and the error if the flip is successful
+            if sum((test_syndrome + curr_syndrome)%2) < sum(curr_syndrome):
+                initial_error[curr_qubit] = 1
+                curr_syndrome = (curr_syndrome + test_syndrome)%2
+
+                # check if flip is successful before full error list is traversed
+                if np.all((curr_syndrome + initial_error@H.T)%2 == 0):
+                    return initial_error
+
+        return initial_error
+
+    def decode(self, syndrome, num_max_iters = 1000):
+        """
+        SSF decoding based on arxiv:2004.11199 algorithm 2, using lookup tables.
+        Assumes that we are decoding X errors.
+        
+        :param syndrome: 1D np.array of the current syndrome
+        :return: error - 1D np.array of the error found by the SSF decoder
+        """
+        error_arr = self.F
+        syndrome_arr = self.syndromes_F
+
+        error = np.zeros(error_arr.shape[1])
+        curr_syndrome = syndrome
+        new_syndrome_inds, pos_syndrome_deltas = self.get_syndrome_weight_change(syndrome) # picks the weight change that is positive
+
+        while len(pos_syndrome_deltas) > 0 and num_max_iters > 0: 
+            num_max_iters -= 1
+            
+            all_error_magnitudes = pos_syndrome_deltas / np.sum(error_arr[new_syndrome_inds, :], axis=1)
+            
+            # Find the errors with the maximum magnitude
+            inds_max_Delta = new_syndrome_inds[np.argmax(all_error_magnitudes)]
+            max_error_arr = error_arr[inds_max_Delta,:]
+            max_syndrome_arr= syndrome_arr[inds_max_Delta,:]
+
+            # Update final error and current syndrome
+            error = (error + max_error_arr) % 2
+            curr_syndrome = (curr_syndrome + max_syndrome_arr) % 2
+
+            if np.all((curr_syndrome + syndrome) % 2 == 0):
+                return error
+            
+            new_syndrome_inds, pos_syndrome_deltas = self.get_syndrome_weight_change(curr_syndrome)
+
+
+        return error
+
+    def ssf_flip_decode(self, syndrome):
+        """ 
+        Run the full decoder process. First run the flip decoder, then if it is unsuccessful, complete small set flip.
+        :param syndrome: 1D np.array of the current syndrome
+        :return: error - 1D np.array of the error found by the SSF and flip decoders
+        """  
+        H = self.H
+
+        flip_error = self.flip_decoder(syndrome)
+
+        if np.all((flip_error@H.T + syndrome) % 2 == 0):
+                return flip_error
+        
+        ssf_error = self.decode(syndrome)
+
+        return ssf_error
+
+
+    def combined_decode(self, syndrome, decoder, dict:dict, function_name:str,tqdm_on=False):
+        '''
+        Iterative decoder for SSF, BP+SSF, and other SSF-based iterative decoders. The decoder will run the SSF decoder first, then the other decoder. 
+        The decoder passed in must be 'iterative' and require some number of iterations to correct the error.
+
+        :param syndrome: The syndrome to be diagnosed by the decoder. Shape (1, # Z-check qubits) 
+        :param decoder: The decoder function to be used. Must be a decoder that requires some number of iterations to correct the error. E.g. ssf, BP, BPOSD
+        :param dict: The dictionary of parameters for the decoder function. Must contain the maximum number of iterations allowed for the decoder
+        :param function_name: The name of the decoder function
+        :param tqdm_on: Whether to use tqdm for progress bar. Default is False
+
+        :return: Decoder's prediction of the error causing the syndrome. If the decoder fails to correct the error, return all 1s 
+        '''
+
+        # Initialize the decoder
+        H = self.H
+        initial_syndrome = syndrome
+        error = np.zeros(H.shape[1])
+        T = 0
+
+
+        iterative_decoder = decoder(csc_matrix(H), **dict)
+
+        while T <= dict['max_iter']: # check how often it breaks loop without success
+            # Run the decoder
+            error = getattr(iterative_decoder, function_name)(initial_syndrome)
+            syndrome = (initial_syndrome + error@H.T) % 2
+
+            if np.any(syndrome):
+                ssf_error = self.decode(syndrome)
+                error = (error + ssf_error) % 2
+                syndrome = (initial_syndrome + error@H.T) % 2
+                print("SSF updated decoder error after {} iterations".format(T))
+                
+                if np.all(syndrome == 0):
+                    print("Decoder successfully corrected the error after {} iterations".format(T))
+                    return error
+            else:
+                print("Decoder successfully corrected the error after {} iterations, SSF skipped".format(T))
+                return error
+
+            T += 1
+        print("Decoder failed to correct the error after {} iterations".format(T))
+        return error
+
+    # old version of decoder, maybe change back once 
+    def bp_iterative_decode(self, syndrome, max_iter=100, schedule='serial'):
+        '''
+        Iterative decoder for BP+SSF. Pseudocode from arxiv:2004.11199 algorithm 3. The decoder will run the SSF decoder first, then the BP decoder.
+        The BP decoder will run for a maximum number of iterations, max_iter, and use the given schedule.
+
+        :param syndrome: The syndrome to be diagnosed by the decoder. Shape (1, # Z-check qubits)
+        :param error_rate: Estimate of error rate in the context of code-capacity/phenomenological level simulations. 
+        :param max_iter: Maximum number of iterations for the BP decoder
+        :param schedule: The schedule for the BP decoder
+        :return: The error predicted by the decoder. If the decoder fails to correct the error, return all 1s
+        '''
+        # check that I'm using error channel right:
+        # https://software.roffe.eu/ldpc/bp_decoding_example.html#Assymetric-error-channels
+        # ask mingyu about working with Yingjia's code
+        # dict_BP = {'error_channel': self.p*np.ones(), 'max_iter': max_iter, 'schedule': schedule}
+        dict_BP = {'error_rate': float(self.p), 'max_iter': max_iter, 'schedule': schedule}
+        error_predicted = self.combined_decode(syndrome, BpDecoder, dict_BP, 'decode', tqdm_on=False)
+         
+        return error_predicted
+
+    def bposd_iterative_decode_mem(self, syndrome, max_iter=10, schedule='serial', bp_method='product_sum', osd_method='osd_cs', osd_order=0):
+        '''
+        Iterative decoder for BP+SSF. Pseudocode from arxiv:2004.11199 algorithm 3. The decoder will run the SSF decoder first, then the BP decoder.
+        The BP decoder will run for a maximum number of iterations, max_iter, and use the given schedule.
+
+        :param syndrome: The syndrome to be diagnosed by the decoder. Shape (1, # Z-check qubits)
+        :param error_rate: Estimate of error rate in the context of code-capacity/phenomenological level simulations. 
+        :param max_iter: Maximum number of iterations for the BP decoder
+        :param schedule: The schedule for the BP decoder
+        :return: The error predicted by the decoder. If the decoder fails to correct the error, return all 1s
+        '''
+
+        dict_BPOSD={'bp_method' : bp_method,
+            'max_iter' : max_iter,
+            'schedule' : schedule,
+            'osd_method' : osd_method,
+            'osd_order' : osd_order,
+            'channel_probs': self.p}
+        # print(len(syndrome), "syndrome in bposd")
+        error_predicted = self.combined_decode(syndrome, BpOsdDecoder, dict_BPOSD, 'decode', tqdm_on=True)
+        # print("error predicted", error_predicted)
+        return error_predicted

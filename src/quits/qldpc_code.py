@@ -226,6 +226,48 @@ class HgpCode(QldpcCode):
         # Color the edges of self.graph
         self.color_edges()
         return
+    
+    def get_SSF_error_matrix(self, error_type="X", max_num_error=None):
+        """
+        Find the valid errors of type given by error_type.
+
+        :param error_type: the type of error to be considered. 'X' for X errors, 'Z' for Z errors
+        :param max_num_error: the maximum number of simultaneous single qubit errors allowed
+
+        :return: F - the matrix of allowable errors and, syndrome_F - the syndromes they generate
+        """
+        if error_type == "X":
+            H = self.hz
+        elif error_type == "Z":
+            H = self.hx
+
+        # Set to store unique errors efficiently
+        error_indices_set = set()
+
+        for i in range(H.shape[0]):
+            supp = H[i].nonzero()[0]  # indices of i-th stabilizer generator's support
+            if max_num_error is None: max_num_error = len(supp)
+            
+            # Generate all combinations of indices of the support of the i-th stabilizer generator
+            indices = list(itertools.combinations(range(len(supp)), max_num_error))
+            errors = np.zeros((len(indices), len(supp)), dtype=int)
+            for i, idx in enumerate(indices):
+                errors[i, list(idx)] = 1
+
+            # apply all the possible combinations of errors to the support of the i-th stabilizer generator
+            for error in errors:
+                if tuple(supp[error.astype(bool)]) not in error_indices_set:
+                    error_indices_set.add(tuple(supp[error.astype(bool)]))
+
+        # generate the possible error matrix
+        F = np.zeros((len(error_indices_set), H.shape[1]), dtype=int)
+        for j in range(F.shape[0]):
+            error_indices = error_indices_set.pop()
+            F[j, error_indices] = 1
+        
+        # generate all the syndromes for H and F
+        syndromes_F = F @ H.T
+        return F, syndromes_F
 
 
 # Quasi-cyclic lifted product (QLP) code
