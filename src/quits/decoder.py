@@ -5,11 +5,13 @@
 import numpy as np
 from ldpc.bposd_decoder import BpOsdDecoder
 from ldpc.bplsd_decoder import BpLsdDecoder
+from ldpc.bp_decoder import BpDecoder
 from tqdm import tqdm
 from scipy.sparse import csc_matrix
 import stim
 from typing import List, FrozenSet, Dict
 import warnings
+from quits.ldpc_utility import compute_lz_and_lx, compute_lz
 
 def sliding_window_phenom_mem(zcheck_samples, hz, lz, W, F, decoder1, decoder2, dict1:dict, dict2:dict, function_name1:str, function_name2:str, tqdm_on=False):
     '''
