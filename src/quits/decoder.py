@@ -508,7 +508,7 @@ def sliding_window_bplsd_circuit_mem(zcheck_samples, circuit, hz, lz, W, F, max_
     return logical_pred
 
 class SSFDecoder:
-    def __init__(self, code, p, error_type):
+    def __init__(self, code, p, error_type, max_num_errors = None):
         
         self.Hx = code.hx # the parity check matrix
         self.Hz = code.hz
@@ -517,11 +517,11 @@ class SSFDecoder:
 
         if error_type == "Z":
             self.H = self.Hx
-            self.F, self.syndromes_F = code.get_SSF_error_matrix(error_type = "Z") # the error matrix and the syndromes they generate
+            self.F, self.syndromes_F = code.get_SSF_error_matrix(error_type = "Z", max_num_error=max_num_errors) # the error matrix and the syndromes they generate
             self.L = Lx
         elif error_type == "X":
             self.H = self.Hz
-            self.F, self.syndromes_F = code.get_SSF_error_matrix(error_type = "X")
+            self.F, self.syndromes_F = code.get_SSF_error_matrix(error_type = "X", max_num_error=max_num_errors) # the error matrix and the syndromes they generate
             self.L = Lz
         
 

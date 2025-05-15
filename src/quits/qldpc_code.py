@@ -7,6 +7,7 @@ import random
 import networkx as nx
 from .ldpc_utility import compute_lz_and_lx
 from scipy.linalg import circulant
+import itertools
 
 # Parent class 
 class QldpcCode:
@@ -249,7 +250,11 @@ class HgpCode(QldpcCode):
             if max_num_error is None: max_num_error = len(supp)
             
             # Generate all combinations of indices of the support of the i-th stabilizer generator
-            indices = list(itertools.combinations(range(len(supp)), max_num_error))
+            # indices = list(itertools.combinations(range(len(supp)), max_num_error))
+            indices = []
+            for j in range(1,max_num_error+1):
+                indices += list(itertools.combinations(range(len(supp)), j))
+                
             errors = np.zeros((len(indices), len(supp)), dtype=int)
             for i, idx in enumerate(indices):
                 errors[i, list(idx)] = 1
@@ -266,7 +271,7 @@ class HgpCode(QldpcCode):
             F[j, error_indices] = 1
         
         # generate all the syndromes for H and F
-        syndromes_F = F @ H.T
+        syndromes_F = (F @ H.T)%2
         return F, syndromes_F
 
 
