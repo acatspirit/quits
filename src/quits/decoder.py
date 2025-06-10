@@ -421,6 +421,8 @@ def sliding_window_circuit_mem(zcheck_samples, circuit, hz, lz, W, F, decoder1, 
             
             
             decoded_errors = getattr(decoder[k], function_name1)(diff_syndrome)
+            print(decoded_errors.shape)
+            print(window_observable_set[k].shape)
             correction=window_observable_set[k]@decoded_errors[:window_observable_set[k].shape[1]]%2#interpret the correction operation as final observable flips
             
             syn_update = window_update[k]@decoded_errors[:window_observable_set[k].shape[1]]%2
@@ -508,10 +510,23 @@ def sliding_window_bplsd_circuit_mem(zcheck_samples, circuit, hz, lz, W, F, max_
     return logical_pred
 
 class SSFDecoder:
-    def __init__(self, code, p, error_type, max_num_errors = None):
-        
-        self.Hx = code.hx # the parity check matrix
-        self.Hz = code.hz
+    def __init__(self, H_DEM, code, p, error_type, max_num_errors = None):
+        """
+        Initialize the SSFDecoder with the parity check matrix and the code.
+
+        :param H_DEM: The parity check matrix for the code at circuit level from a DEM. If None, it will use the code's parity check matrix.
+        :param code: The code object that contains code information.
+        :param p: The physical error rate.
+        :param error_type: The type of error to decode, either "Z" or "X".
+        :param max_num_errors: The maximum number of errors to consider for the decoder. If None, it will use the code's maximum number of errors.
+        """
+
+        if H_DEM is None: # code cap simulation, use the code parity check matrix
+            self.Hx = code.hx # the parity check matrix
+            self.Hz = code.hz
+        else: #circuit level simulation, use the DEM parity check matrix 
+            self.Hx = H_DEM
+            self.Hz = H_DEM
         self.p = p # the physical error rate
         Lz, Lx = compute_lz_and_lx(self.Hx, self.Hz) # the logical codeword matrix
 
