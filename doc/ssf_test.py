@@ -15,7 +15,7 @@ import sys
 import os
 
 # Get absolute path to ../src (the folder containing qldpc_circuit)
-src_path = os.path.abspath(os.path.join(os.path.dirname('/Users/ariannameinking/Documents/Brown_Research/quits/docs/ssf_test.ipynb'), '..', 'src'))
+src_path = os.path.abspath(os.path.join(os.path.dirname('/hpc/group/brownlab/am1155/quits/doc/ssf_test.ipynb'), '..', 'src'))
 
 if src_path not in sys.path:
     sys.path.insert(0, src_path)
