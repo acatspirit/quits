@@ -39,7 +39,7 @@ code_list = []
 log_df = {}
 
 for i, (n, dv, dc, dist) in enumerate(zip(n_list, dv_list, dc_list, dist_list)):
-    h = np.loadtxt('/Users/ariannameinking/Documents/Brown_Research/quits/parity_check_matrices/n=%d_dv=%d_dc=%d_dist=%d.txt'%(n, dv, dc, dist), dtype=int)
+    h = np.loadtxt('../parity_check_matrices/n=%d_dv=%d_dc=%d_dist=%d.txt'%(n, dv, dc, dist), dtype=int)
     curr_code = HgpCode(h, h)
     code_list += [curr_code]
     log_df[f"n={n}, dv={dv}, dc={dc}, dist={dist}"] = []
