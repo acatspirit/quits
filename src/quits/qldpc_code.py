@@ -265,6 +265,9 @@ class HgpCode(QldpcCode):
                     error_indices_set.add(tuple(supp[error.astype(bool)]))
 
         # generate the possible error matrix
+
+        # TODO: check which part is running out - F or syndF
+        # TODO: see if I can put this on disk with python lib ? how fast is it with disk?
         F = np.zeros((len(error_indices_set), H.shape[1]), dtype=int)
         for j in range(F.shape[0]):
             error_indices = error_indices_set.pop()

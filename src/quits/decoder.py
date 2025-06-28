@@ -258,7 +258,7 @@ def detector_error_model_to_matrix(dem: stim.DetectorErrorModel):
         if dets not in dem_dict:#for syndrome not added to the dem_dict            
             dem_dict[dets] = len(dem_dict)#key: detector flips, value: fault_ids
             priors.append(prob)#list of probability
-            Logical_dict[dem_dict[dets]] = obs#key: fault_ids, value: observable flips
+            Logical_dict[dem_dict[dets]] = obs #key: fault_ids, value: observable flips
         else:
             syndrome_id = dem_dict[dets]# get the syndrome id when the syndrome is already added into the dem_dict
             priors[syndrome_id] = priors[syndrome_id]*(1-prob)+prob*(1-priors[syndrome_id])#combining the probability

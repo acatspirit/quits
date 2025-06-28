@@ -29,11 +29,11 @@ from quits.ldpc_utility import *
 
 
 
-n_list = [60, 28,20,12] 
+n_list = [28,20,12] 
 m = 15
-dv_list = [3,3,3,3]
-dc_list = [12,4,4,4]
-dist_list = [4,10,8,6]
+dv_list = [3,3,3]
+dc_list = [4,4,4]
+dist_list = [10,8,6]
 
 code_list = []
 log_df = {}
@@ -52,9 +52,9 @@ pL_list = []
 num_trials_list = np.array([500, 400, 400, 200, 50],dtype=int)
 
 for j,code in enumerate(code_list):
-    print(f"Code {j+1}/{len(code_list)}: n={code.hz.shape[1]}, m={code.hz.shape[0]}")
-    print(f"classical parameters: n={n_list[j]}, dv={dv_list[j]}, dc={dc_list[j]}, dist={dist_list[j]}")
-    print("Starting trials...")
+    # print(f"Code {j+1}/{len(code_list)}: n={code.hz.shape[1]}, m={code.hz.shape[0]}")
+    # print(f"classical parameters: n={n_list[j]}, dv={dv_list[j]}, dc={dc_list[j]}, dist={dist_list[j]}")
+    # print("Starting trials...")
     for i, p in enumerate(p_list):
         for _ in range(num_trials_list[i]):
             print(f"p = {p}, trial {_+1}/{num_trials_list[i]}")
@@ -67,7 +67,7 @@ for j,code in enumerate(code_list):
         pL_list += [sum(log_errors_list)/num_trials_list[i]]
     log_df[f"n={n_list[j]}, dv={dv_list[j]}, dc={dc_list[j]}, dist={dist_list[j]}"] = pL_list
 
-log_df.to_csv('/Users/ariannameinking/Documents/Brown_Research/quits/log_df.csv')
+log_df.to_csv('/Users/ariannameinking/Documents/Brown_Research/quits/doc/log_df_SSF.csv')
 
 
 
