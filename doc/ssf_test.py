@@ -34,19 +34,21 @@ m = 15
 dv_list = [3,3,3]
 dc_list = [4,4,4]
 dist_list = [10,8,6]
-
+seed_list = [1,1,22]
 code_list = []
 log_dict = {}
 
 # for i, (n, dv, dc, dist) in enumerate(zip(n_list, dv_list, dc_list, dist_list)):
 #     h = np.loadtxt('../parity_check_matrices/n=%d_dv=%d_dc=%d_dist=%d.txt'%(n, dv, dc, dist), dtype=int)
 #     curr_code = HgpCode(h, h)
+#     curr_code.build_graph(seed=seed_list[i])
 #     code_list += [curr_code]
 #     log_df[f"n={n}, dv={dv}, dc={dc}, dist={dist}"] = []
 
 # first just test with just the 225 code
 h = np.loadtxt('../parity_check_matrices/n=%d_dv=%d_dc=%d_dist=%d.txt'%(12, 3, 4, 6), dtype=int)
 curr_code = HgpCode(h, h)
+curr_code.build_graph(seed=seed_list[2])
 code_list += [curr_code]
 log_dict[f"n=12, dv=3, dc=4, dist=6"] = []
 log_df = pd.DataFrame(log_dict)
