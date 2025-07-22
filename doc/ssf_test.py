@@ -24,7 +24,7 @@ if src_path not in sys.path:
 from quits.qldpc_code import *
 from quits.circuit import get_qldpc_mem_circuit
 from quits.simulation import get_stim_mem_result
-from quits.decoder import SSFDecoder
+from quits.decoder import SSFDecoder, sliding_window_circuit_mem, detector_error_model_to_matrix
 from quits.ldpc_utility import *
 
 
@@ -38,11 +38,17 @@ dist_list = [10,8,6]
 code_list = []
 log_df = {}
 
-for i, (n, dv, dc, dist) in enumerate(zip(n_list, dv_list, dc_list, dist_list)):
-    h = np.loadtxt('../parity_check_matrices/n=%d_dv=%d_dc=%d_dist=%d.txt'%(n, dv, dc, dist), dtype=int)
-    curr_code = HgpCode(h, h)
-    code_list += [curr_code]
-    log_df[f"n={n}, dv={dv}, dc={dc}, dist={dist}"] = []
+# for i, (n, dv, dc, dist) in enumerate(zip(n_list, dv_list, dc_list, dist_list)):
+#     h = np.loadtxt('../parity_check_matrices/n=%d_dv=%d_dc=%d_dist=%d.txt'%(n, dv, dc, dist), dtype=int)
+#     curr_code = HgpCode(h, h)
+#     code_list += [curr_code]
+#     log_df[f"n={n}, dv={dv}, dc={dc}, dist={dist}"] = []
+
+# first just test with just the 225 code
+h = np.loadtxt('../parity_check_matrices/n=%d_dv=%d_dc=%d_dist=%d.txt'%(12, 3, 4, 6), dtype=int)
+curr_code = HgpCode(h, h)
+code_list += [curr_code]
+log_df[f"n=12, dv=3, dc=4, dist=6"] = []
 
 log_errors_list = []
 p_list = np.logspace(-2, -1, 5)
@@ -52,20 +58,27 @@ pL_list = []
 num_trials_list = np.array([500, 400, 400, 200, 50],dtype=int)
 
 for j,code in enumerate(code_list):
-    # print(f"Code {j+1}/{len(code_list)}: n={code.hz.shape[1]}, m={code.hz.shape[0]}")
-    # print(f"classical parameters: n={n_list[j]}, dv={dv_list[j]}, dc={dc_list[j]}, dist={dist_list[j]}")
-    # print("Starting trials...")
+    pL_list = []
     for i, p in enumerate(p_list):
-        for _ in range(num_trials_list[i]):
-            print(f"p = {p}, trial {_+1}/{num_trials_list[i]}")
-            error = np.random.rand(code.hz.shape[1]) < p
-            syndrome = (error@code.hz.T)%2
-            SSF_decoder = SSFDecoder(None, code, p, "Z")
-            decoded_error = SSF_decoder.decode(syndrome, num_max_iters=200)
-            lz_pred = SSF_decoder.logical_error((decoded_error + error)%2)
-            log_errors_list += [np.any(lz_pred)]
-        pL_list += [sum(log_errors_list)/num_trials_list[i]]
-    log_df[f"n={n_list[j]}, dv={dv_list[j]}, dc={dc_list[j]}, dist={dist_list[j]}"] = pL_list
+        num_rounds = 5
+        num_trials = num_trials_list[i]
+        basis = 'Z'
+        W = 1
+        F = 1
+        circuit = stim.Circuit(get_qldpc_mem_circuit(code, p, p, p, p, num_rounds))
+        zcheck_samples, logical_obs_samples = get_stim_mem_result(circuit, num_trials, seed=0)
+        dict1 = {'code':code,'p':p, 'error_type':basis}
+        dict2 = {'code':code,'p':p, 'error_type':basis}
+
+        DEM = circuit.detector_error_model()
+        H, Ls, errors_weights = detector_error_model_to_matrix(DEM)
+        logical_pred = sliding_window_circuit_mem(zcheck_samples=zcheck_samples, circuit=circuit, hz=H, lz=Ls, W=W, F=F, decoder1=SSFDecoder, decoder2=SSFDecoder,dict1=dict1, dict2=dict2, error_rate_name1='p', error_rate_name2='p', function_name1='decode', function_name2='decode', tqdm_on=True)
+
+        pL = np.sum((logical_obs_samples - logical_pred).any(axis=1)) / num_trials
+        # print('p: %.7f, pL: %.7f'%(p, pL))
+        pL_list += [pL]
+            
+    log_df.loc[i, log_df.columns[j+1]] = pL_list
 
 log_df.to_csv('/Users/ariannameinking/Documents/Brown_Research/quits/doc/log_df_SSF.csv')
 

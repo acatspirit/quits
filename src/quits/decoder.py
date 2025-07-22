@@ -394,6 +394,7 @@ def sliding_window_circuit_mem(zcheck_samples, circuit, hz, lz, W, F, decoder1, 
     #spacetime detector error matrix
     window_check_set,window_observable_set,window_priors_set,window_update = spacetime(circuit,hz, W, F,num_cor_rounds)
     #decoder for each window
+    print("building the decoder")
     decoder=[]
     for i in range(len(window_check_set)-1):
         dict1[error_rate_name1]=window_priors_set[i]
@@ -409,6 +410,7 @@ def sliding_window_circuit_mem(zcheck_samples, circuit, hz, lz, W, F, decoder1, 
     else:
         iterator = range(num_trials)
     logical_z_pred = np.zeros((num_trials, lz.shape[0]), dtype=int)
+    print("correction time")
     
     for i in iterator:#each sample decoding
         accumulated_correction=np.zeros(window_observable_set[0].shape[0], dtype=int)
@@ -418,10 +420,13 @@ def sliding_window_circuit_mem(zcheck_samples, circuit, hz, lz, W, F, decoder1, 
             #syndrome of the window
             diff_syndrome = (zcheck_samples[i, F*k*hz.shape[0]:(F*k+W)*hz.shape[0]].copy()) % 2
             diff_syndrome[:hz.shape[0]] = (diff_syndrome[:hz.shape[0]] + syn_update) % 2#update the syndrome based on the previous window decoding
-            
-            
+            print(hz.shape)
+            print(diff_syndrome[:hz.shape[0]].shape, "syndrome shape")
+            # syndrome should be H.shape[0], errors should be H.shape[1] I think ... what is the shape of H here? Is the H I am feeding SSF to get the F_mat different from the H in this function?
+            # maybe try passing in zcheck_samples or some other hz to the get_syndromes function
+            # use function that produces H_DEM for bigger stuff
             decoded_errors = getattr(decoder[k], function_name1)(diff_syndrome)
-            print(decoded_errors.shape)
+            print(decoded_errors.shape[:window_observable_set[k].shape[1]])
             print(window_observable_set[k].shape)
             correction=window_observable_set[k]@decoded_errors[:window_observable_set[k].shape[1]]%2#interpret the correction operation as final observable flips
             
@@ -532,11 +537,11 @@ class SSFDecoder:
 
         if error_type == "Z":
             self.H = self.Hx
-            self.F, self.syndromes_F = code.get_SSF_error_matrix(error_type = "Z", max_num_error=max_num_errors) # the error matrix and the syndromes they generate
+            self.F, self.syndromes_F = code.get_SSF_error_matrix(self.H, error_type = "Z", max_num_error=max_num_errors) # the error matrix and the syndromes they generate
             self.L = Lx
         elif error_type == "X":
             self.H = self.Hz
-            self.F, self.syndromes_F = code.get_SSF_error_matrix(error_type = "X", max_num_error=max_num_errors) # the error matrix and the syndromes they generate
+            self.F, self.syndromes_F = code.get_SSF_error_matrix(self.H, error_type = "X", max_num_error=max_num_errors) # the error matrix and the syndromes they generate
             self.L = Lz
         
 
@@ -665,7 +670,7 @@ class SSFDecoder:
 
         return initial_error
 
-    def decode(self, syndrome, num_max_iters = 1000):
+    def decode(self, syndrome, num_max_iters = 10):
         """
         SSF decoding based on arxiv:2004.11199 algorithm 2, using lookup tables.
         Assumes that we are decoding X errors.
@@ -689,6 +694,7 @@ class SSFDecoder:
             inds_max_Delta = new_syndrome_inds[np.argmax(all_error_magnitudes)]
             max_error_arr = error_arr[inds_max_Delta,:]
             max_syndrome_arr= syndrome_arr[inds_max_Delta,:]
+            print("max_error_shape", max_error_arr.shape)
 
             # Update final error and current syndrome
             error = (error + max_error_arr) % 2

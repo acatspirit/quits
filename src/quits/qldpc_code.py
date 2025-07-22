@@ -228,7 +228,7 @@ class HgpCode(QldpcCode):
         self.color_edges()
         return
     
-    def get_SSF_error_matrix(self, error_type="X", max_num_error=None):
+    def get_SSF_error_matrix(self, H, error_type="X", max_num_error=None):
         """
         Find the valid errors of type given by error_type.
 
@@ -237,10 +237,11 @@ class HgpCode(QldpcCode):
 
         :return: F - the matrix of allowable errors and, syndrome_F - the syndromes they generate
         """
-        if error_type == "X":
-            H = self.hz
-        elif error_type == "Z":
-            H = self.hx
+        if H == None:
+            if error_type == "X":
+                H = self.hz
+            elif error_type == "Z":
+                H = self.hx
 
         # Set to store unique errors efficiently
         error_indices_set = set()
