@@ -36,7 +36,7 @@ dc_list = [4,4,4]
 dist_list = [10,8,6]
 
 code_list = []
-log_df = {}
+log_dict = {}
 
 # for i, (n, dv, dc, dist) in enumerate(zip(n_list, dv_list, dc_list, dist_list)):
 #     h = np.loadtxt('../parity_check_matrices/n=%d_dv=%d_dc=%d_dist=%d.txt'%(n, dv, dc, dist), dtype=int)
@@ -48,7 +48,8 @@ log_df = {}
 h = np.loadtxt('../parity_check_matrices/n=%d_dv=%d_dc=%d_dist=%d.txt'%(12, 3, 4, 6), dtype=int)
 curr_code = HgpCode(h, h)
 code_list += [curr_code]
-log_df[f"n=12, dv=3, dc=4, dist=6"] = []
+log_dict[f"n=12, dv=3, dc=4, dist=6"] = []
+log_df = pd.DataFrame(log_dict)
 
 log_errors_list = []
 p_list = np.logspace(-2, -1, 5)
@@ -78,7 +79,7 @@ for j,code in enumerate(code_list):
         # print('p: %.7f, pL: %.7f'%(p, pL))
         pL_list += [pL]
             
-    log_df.loc[i, log_df.columns[j+1]] = pL_list
+    log_df.loc[i, log_df.columns[j]] = pL_list # used to be j+1, I think this is an artifact from when the first column was the p_list
 
 log_df.to_csv('/Users/ariannameinking/Documents/Brown_Research/quits/doc/log_df_SSF.csv')
 
